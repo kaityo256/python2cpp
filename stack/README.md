@@ -51,7 +51,16 @@ int main() {
 }
 ```
 
+このコードはこのリポジトリに`stack_of.cpp`という名前で[保存されている](https://github.com/kaityo256/python2cpp/tree/main/stack)。
+
 系をN点に分割し、その中央の二点に値をいれておいて、そのあと`STEP`回だけ拡散方程式を解くものだ。系の中央にデルタ関数的に初期値を与えた拡散方程式の解はガウス分布であり、その分散が時間とともに大きくなっていくことは知っているであろう。このプログラムの実行結果をプロットするとこうなる。
+
+```sh
+./stack_of.out > diffusion.dat
+gnuplot diffusion.plt
+```
+
+gnuplotのプロットファイル`diffusion.plt`もこのリポジトリに入っている(以下同様)。
 
 ![diffusion.png](diffusion.png)
 
@@ -65,7 +74,12 @@ const int N = 2000000;
 
 そこそこ大きいサイズに思えるが、計算量は`N*STEP`程度であり、一点あたりの計算も加減乗算が5回程度なので、全体で10G回くらいである。最近のCPUの計算能力はGFlopsクラスであろうから、せいぜい数秒で終わるであろう。そう思ってコンパイル、実行すると、「Segmentation fault」という無情のメッセージを残してプログラムが死ぬ。
 
-あなたはなぜ系のサイズを大きくしただけで、プログラムが死ぬのかわからず、先輩に聞いてみたら、「あ、ここに`static`つけなよ」とだけ言われる。
+```sh
+$ ./stack_of2.out
+zsh: segmentation fault  ./stack_of2.out
+```
+
+あなたはなぜ系のサイズを大きくしただけで、プログラムが死ぬのかわからず、先輩に聞いてみたら、「あ、ここに`static`つけなよ」と言われる。
 
 ```cpp
 void update() {
@@ -80,6 +94,11 @@ void update() {
 ```
 
 言われるままに、関数`update`の一時配列の宣言に`static`とつけて、コンパイル、実行してみると、問題なく実行される。
+
+```sh
+./stack_of3.out > diffusion_large.dat
+gnuplot diffusion_large.plt
+```
 
 ![diffusion_large.png](diffusion_large.png)
 
