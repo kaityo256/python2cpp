@@ -211,7 +211,152 @@ int main() {
 }
 ```
 
-`#include "add.h"`は、「この場所に`add.h`のファイルを読み込んで展開しろ」という意味だ。ただ展開するだけである。
+`#include "add.h"`は、「この場所に`add.h`のファイルを読み込んで展開しろ」という意味だ。ただ文字通り展開するだけである。このように`#`から始まる命令をディレクティブ(directive)と呼ぶ。ディレクティブとは、プログラムとは別にコンパイラに「こうしなさい」と指示する命令だ。ディレクティブが機能するのは、プログラムの実行時ではなく、コンパイル時である。
+
+## プリプロセッサ
+
+`#include`は、続くファイルをその場に読み込むことをコンパイラに指示するディレクティブである。実際にこれを処理するのはプリプロセッサと呼ばれるプログラムだ。その動作を見てみよう。
+
+いま、こんなヘッダファイルを作ろう(`test.h`)。
+
+```cpp
+const char *msg = "Hello! This is test.h\n";
+```
+
+そして、それをインクルードするだけのファイル(`test.cpp`)を作る。後でわかるように変数定義を置いておこう。
+
+```cpp
+#include "test.cpp"
+const char *msg2 = "Hello! This is test.cpp\n";
+```
+
+コンパイラにこのファイルを食わせると、まずプリプロセッサと呼ばれるプログラムが走って、ディレクティブを処理する。その振る舞いを見るには、`g++`に`-E`というオプションを与えてファイルを食わせれば良い。
+
+```sh
+$ g++ -E test.cpp
+# 1 "test.cpp"
+# 1 "<built-in>"
+# 1 "<command-line>"
+# 1 "/usr/include/stdc-predef.h" 1 3 4
+# 1 "<command-line>" 2
+# 1 "test.cpp"
+# 1 "test.h" 1
+const char *msg = "Hello! This is test.h\n";
+# 2 "test.cpp" 2
+const char *msg2 = "Hello! This is test.cpp\n";
+```
+
+すると、標準出力にプリプロセッサが処理した後の結果が表示される。いろいろディレクティブが追加されているが、基本的には`test.cpp`の`#include`があった場所に`test.h`の内容が展開されていることがわかる。
+
+同様にプリプロセッサが処理するディレクティブに`#ifdef`と`#endif`がある。`#ifdef`は後ろにトークンをとり、それが定義されていれば次の`#endif`までが有効になるが、定義されていなければ`#endif`まで読み飛ばすというものだ。試してみよう。
+
+こんなファイル(`ifdef.cpp`)を書いてみる。
+
+```cpp
+#ifdef HOGE
+const char *msg = "Hoge is defined!";
+#endif
+```
+
+これをプリプロセッサに食わせてみよう。
+
+```sh
+$ g++ -E ifdef.cpp
+ 1 "ifdef.cpp"
+# 1 "<built-in>"
+# 1 "<command-line>"
+# 1 "/usr/include/stdc-predef.h" 1 3 4
+# 1 "<command-line>" 2
+# 1 "ifdef.cpp"
+```
+
+`HOGE`なんてトークンは定義されていないので、`#ifdef`から`#endif`まで読みよばされてしまう。このトークンを定義するには`#define`を使う。
+
+```cpp
+#define HOGE
+
+#ifdef HOGE
+const char *msg = "Hoge is defined!";
+#endif
+```
+
+今度は`HOGE`が定義されているので、`#ifdef HOGE`が有効となり、`#endif`までが読み飛ばされない。
+
+```sh
+$ g++ -E ifdef2.cpp
+# 1 "ifdef2.cpp"
+# 1 "<built-in>"
+# 1 "<command-line>"
+# 1 "/usr/include/stdc-predef.h" 1 3 4
+# 1 "<command-line>" 2
+# 1 "ifdef2.cpp"
+
+
+
+const char *msg = "Hoge is defined!";
+```
+
+なお、この`#define`はコンパイル時に`-D`オプションで与えることもできる。
+
+```sh
+$ g++ -E -DHOGE ifdef.cpp
+# 1 "ifdef.cpp"
+# 1 "<built-in>"
+# 1 "<command-line>"
+# 1 "/usr/include/stdc-predef.h" 1 3 4
+# 1 "<command-line>" 2
+# 1 "ifdef.cpp"
+
+const char *msg = "Hoge is defined!";
+```
+
+`ifdef.cpp`の中では`HOGE`は未定義だが、コンパイル時に定義してやったので、`#ifdef HOGE`が有効になった。
+
+なお、`#define HOGE 1`のように、トークンに値を定義することもできる。例えば、こんなコードが書ける。
+
+```cpp
+#include <cstdio>
+
+#define N 10
+
+int main() {
+  for (int i = 0; i < N; i++) {
+    printf("%d\n", i);
+  }
+}
+```
+
+`#define N 10`は、「以後、Nを見かけたら10に置換しなさい」という指示だ。この置換は、C/C++プログラム的に正しいかどうかなどは全く気にせず、文字列置換として実施される。したがって、思わぬバグの温床となる。
+
+現在では定数を扱う場合は
+
+```cpp
+#include <cstdio>
+
+const int N = 10;
+
+int main() {
+  for (int i = 0; i < N; i++) {
+    printf("%d\n", i);
+  }
+}
+```
+
+などと、`const`をつけてC/C++のプログラムとして定数を宣言する。
+
+しかし、`#define`は絶滅したかというとそうではなく、例えばアーキテクチャごとに異なる処理をしたいが、それらを同じファイルに書きたい時などに使われる。
+
+```cpp
+void force_calculation(){
+#ifdef ARM64
+// ARM64用の処理
+#endif //ARM64
+#ifdef x86
+// x86用の処理
+#endif //x86
+}
+
+自分でこういうコードを書くことは少ないと思われるが、見かけた時にびっくりしないで欲しい。
 
 ## インクルードガード
 
@@ -300,7 +445,7 @@ $ ./a.out
 3.141592
 ```
 
-仕組みを説明しよう。まず、`#ifndef CONST_H`とは、`CONST_H`が定義されていなければ`#endif`までを有効にしなさい、という意味だ。最初はそんなものは定義されていないので、`#ifndef`から`#ifdef`が有効となる。
+仕組みを説明しよう。まず、`#ifndef CONST_H`とは、`#ifdef`とは逆に、`CONST_H`が定義されて**いなければ**`#endif`までを有効にしなさい、という意味だ。最初はそんなものは定義されていないので、`#ifndef`から`#ifdef`が有効となる。
 
 次にある`#define CONST_H`は`CONST_H`を定義せよ、という命令である。そして、ヘッダファイルの本体が続く。
 
@@ -356,3 +501,11 @@ const double my_pi = 3.141592;
 なぜ標準化されないのか等は、適当にググってC++の闇に震えてもらうことにして、基本的には普段使うコンパイラは`#pragma once`はサポートしていると思われるので、自分でヘッダファイルを書く際はそっちを使っておけば良い。
 
 ただし、ちょっと古いコードなどを見ると`#ifndef`から`#endif`で囲まれたインクルードガードが使われていることが多いので、もし見かけたら「あぁ、インクルードガードだなぁ」と思って欲しい。
+
+## リンカのお仕事
+
+TODO: せっかく関数がメモリ上にあると書いたんだから、リンカの仕事も少し触れる？ readelfとかで関数のアドレスとか表示させるとか？
+
+## まとめ
+
+よく使う関数をまとめてあらかじめコンパイルしたものを「ライブラリ」と呼ぶ。そのライブラリを使う際に、関数のプロトタイプ宣言が必要となるので、それを`#include`でインクルードしてやる。この`#include`は文字通りファイルをそのままインクルードするだけなので、同じファイルを複数回インクルードするとおかしくなる。それを防ぐのがインクルードガードであったり、`#pragma once`ディレクティブであったりする。この`#include`や`#define`を処理するプログラムがプリプロセッサで、プリプロセッサはC/C++のプログラムとは無関係に、ただ機械的に処理を行う。なので、必要がなければ`#define`などは使わない方が良い。
